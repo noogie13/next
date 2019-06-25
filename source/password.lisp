@@ -26,7 +26,7 @@
 (defmethod clip-password ((password-interface password-store-interface) password-name)
   (uiop:run-program `("pass" "-c" ,password-name)))
 
-(defmethod list-passwords (password-store-interface)
+(defmethod list-passwords ((password-interface password-store-interface))
   (let ((raw-list (directory (concatenate 'string (password-directory password-store-interface)
                                           "/**/*.gpg"))))
     (mapcar #'(lambda (x) (cl-ppcre:regex-replace
