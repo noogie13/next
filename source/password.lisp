@@ -1,18 +1,14 @@
 (in-package :next)
 
-(defvar *password-instance* nil)
-
 (defclass password-interface ()
   ())
 
 (defclass password-store-interface (password-interface)
-  ((password-directory
-    :initarg :directory
-    :initform (if (uiop:getenv "PASSWORD_STORE_DIR")
-                  (uiop:getenv "PASSWORD_STORE_DIR")
-                  (namestring (format nil "~a/.password-store"
-                                      (uiop:getenv "HOME"))))
-    :reader password-directory)))
+  ((password-directory :reader password-directory
+                       :initarg :directory
+                       :initform (or (uiop:getenv "PASSWORD_STORE_DIR")
+                                     (namestring (format nil "~a/.password-store"
+                                                         (uiop:getenv "HOME")))))))
 
 (defclass keepassxc-interface (password-interface)
   ())
@@ -24,24 +20,24 @@
   (:documentation "Retrieve specific password by name."))
 
 (defmethod clip-password ((password-interface password-store-interface) password-name)
-  (uiop:run-program `("pass" "-c" ,password-name)))
+  (uiop:run-program `("pass" "--clip" ,password-name)))
 
 (defmethod list-passwords ((password-interface password-store-interface))
-  (let ((raw-list (directory (concatenate 'string (password-directory password-store-interface)
-                                          "/**/*.gpg"))))
-    (mapcar #'(lambda (x) (cl-ppcre:regex-replace
-                           (concatenate 'string "(" (password-directory *password-instance*) ")/(.*).gpg")
-                           (namestring x) "\\2"))
+  (let ((raw-list (directory (format nil "~a/**/*.gpg"
+                                     (password-directory password-interface)))))
+    (mapcar #'(lambda (x) (cl-ppcre:regex-replace (format nil "(~a)/(.*).gpg"
+                                                          (password-directory (password *interface*)))
+                                                  (namestring x) "\\2"))
             raw-list)))
 
-(defun copy-password-completing-fn (password-instance)
+(defun -completing-fn (password-instance)
   (let ((password-list (list-passwords password-instance)))
     (lambda (input)
       (fuzzy-match input password-list))))
 
-(define-command list-and-copy-password ()
-  "Lists passwords, then copies chosen password."
+(define-command copy-password ()
+  "Copy's chosen password from minibuffer."
   (with-result (password-name (read-from-minibuffer
-                        (minibuffer *interface*)
-                        :completion-function (copy-password-completing-fn *password-instance*)))
-    (clip-password *password-interface* password-name)))
+                               (minibuffer *interface*)
+                               :completion-function (-completing-fn (password *interface*))))
+    (clip-password (password *interface*) password-name)))
