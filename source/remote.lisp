@@ -143,6 +143,7 @@ for the platform port to start up.")
 RPC endpoint of a platform-port to see if it is ready to begin accepting RPC
 commands.")
    (active-connection :accessor active-connection :initform nil)
+   (password :accessor password :initform nil)
    (minibuffer :accessor minibuffer :initform (make-instance 'minibuffer)
                :documentation "The minibuffer object.")
    (windows :accessor windows :initform (make-hash-table :test #'equal))
