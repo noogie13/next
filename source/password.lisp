@@ -36,7 +36,8 @@
   (uiop:run-program `("pass" "--clip" ,password-name)))
 
 (defmethod save-password ((password-interface password-store-interface) password-name password)
-  (uiop:run-program (str:concat "echo \"" password "\" | pass insert --echo " password-name)))
+  (with-open-stream (st (make-string-input-stream password))
+      (uiop:run-program `("pass" "insert" "--echo" ,password-name) :input st)))
 
 (defun copy-password-completion-fn (password-instance)
   (let ((password-list (list-passwords password-instance)))
