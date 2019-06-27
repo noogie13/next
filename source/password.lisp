@@ -47,4 +47,4 @@
                                :completion-function (copy-password-completion-fn (password *interface*))))
     (clip-password (password *interface*) password-name)))
 
-;;; to test this, load this file from init, and (setf (password *interface*) (make-instance 'password-store-interface))
+;; to test this, load this file from init, and (setf (password *interface*) (make-instance 'password-store-interface))
