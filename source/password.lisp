@@ -28,7 +28,7 @@
                                      (password-directory password-interface)))))
     (mapcar #'(lambda (x) (cl-ppcre:regex-replace
                            (format nil "(~a)/(.*).gpg"
-                                   (password-directory (password *interface*)))
+                                   (password-directory password-interface))
                            (namestring x) "\\2"))
             raw-list)))
 
