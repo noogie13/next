@@ -33,11 +33,20 @@
             raw-list)))
 
 (defmethod clip-password ((password-interface password-store-interface) password-name)
-  (uiop:run-program `("pass" "--clip" ,password-name)))
+  (let ((original-clipboard (trivial-clipboard:text))
+        (password (with-open-stream (st (make-string-output-stream))
+                    (uiop:run-program `("pass" "show" ,password-name) :output st)
+                    (get-output-stream-string st))))
+    (trivial-clipboard:text password)
+    (bt:make-thread
+     (lambda ()
+       (sleep 5)
+       (when (string= (trivial-clipboard:text) password)
+         (trivial-clipboard:text original-clipboard))))))
 
 (defmethod save-password ((password-interface password-store-interface) password-name password)
   (with-open-stream (st (make-string-input-stream password))
-      (uiop:run-program `("pass" "insert" "--echo" ,password-name) :input st)))
+    (uiop:run-program `("pass" "insert" "--echo" ,password-name) :input st)))
 
 (defun copy-password-completion-fn (password-instance)
   (let ((password-list (list-passwords password-instance)))
@@ -68,17 +77,22 @@
                                (:span :id "cursor" (subseq input-buffer-password cursor-index (+ 1 cursor-index)))
                                (:span (subseq input-buffer-password (+ 1  cursor-index))))))))
 
+(defmacro with-password-html (&body body)
+  `(progn (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
+          (unwind-protect (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original)) ,@body)))
+;; (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))))
+
 (define-command save-new-password ()
   "Saves password to password interface."
-  (with-result (password-name (read-from-minibuffer
-                               (minibuffer *interface*)
-                               :input-prompt "Name for new password:"))
-    (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
-    (with-result (password (read-from-minibuffer
+  (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
+  (with-result* ((password-name (read-from-minibuffer
+                                 (minibuffer *interface*)
+                                 :input-prompt "Name for new password:"))
+                 (password (read-from-minibuffer
                             (minibuffer *interface*)
-                            :input-prompt "New password:"))
-      (save-password (password *interface*) password-name password)))
-  (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original)))
+                            :input-prompt "New password:")))
+    (save-password (password *interface*) password-name password)
+    :callback (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))))
 
 
 ;;; to test this, load this file from init, and (setf (password *interface*) (make-instance 'password-store-interface))
