@@ -49,8 +49,8 @@
 
 (defmethod clip-password ((password-interface password-store-interface) password-name)
   (clip-password-string (with-open-stream (st (make-string-output-stream))
-     (uiop:run-program `("pass" "show" ,password-name) :output st)
-     (get-output-stream-string st))))
+                          (uiop:run-program `("pass" "show" ,password-name) :output st)
+                          (get-output-stream-string st))))
 
 (defmethod save-password ((password-interface password-store-interface) password-name password)
   (with-open-stream (st (make-string-input-stream password))
@@ -99,7 +99,7 @@
       (fuzzy-match input password-list))))
 
 (define-command copy-password ()
-  "Copy's chosen password from minibuffer."
+  "Copy chosen password from minibuffer."
   (with-password (password *interface*)
     (with-result (password-name (read-from-minibuffer
                                  (minibuffer *interface*)
@@ -117,8 +117,9 @@
 (defun generate-input-html-new (input-buffer cursor-index)
   (let ((input-buffer-password (make-string (length input-buffer) :initial-element #\*)))
     (cond ((equal "" input-buffer-password) (cl-markup:markup (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
-          ((eql cursor-index (length input-buffer-password)) (cl-markup:markup (:span input-buffer-password)
-                                                                               (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
+          ((eql cursor-index (length input-buffer-password))
+           (cl-markup:markup (:span input-buffer-password)
+                             (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
           (t (cl-markup:markup (:span (subseq input-buffer-password 0 cursor-index))
                                (:span :id "cursor" (subseq input-buffer-password cursor-index (+ 1 cursor-index)))
                                (:span (subseq input-buffer-password (+ 1  cursor-index))))))))
