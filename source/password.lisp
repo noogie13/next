@@ -57,14 +57,6 @@
     (uiop:run-program `("pass" "insert" "--echo" ,password-name) :input st)))
 
 ;;; KeepassXC implementation.
-(defun cache-password (keepassxc-instance)
-  (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
-  (with-result (password-set (read-from-minibuffer
-                              (minibuffer *interface*)
-                              :input-prompt "Password:"))
-    (setf (password keepassxc-instance) password-set)
-    (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))))
-
 (defmacro with-password (password-interface &body body)
   `(if (null (password ,password-interface))
        (progn
