@@ -40,12 +40,12 @@
 ;;; Password-Store implementation.
 (defmethod list-passwords ((password-interface password-store-interface))
   (let ((raw-list (directory (format nil "~a/**/*.gpg"
-                                     (password-directory password-interface)))))
-    (mapcar #'(lambda (x) (cl-ppcre:regex-replace
-                           (format nil "(~a)/(.*).gpg"
-                                   (password-directory password-interface))
-                           (namestring x) "\\2"))
+                                     (password-directory password-interface))))
+        (dir-length (length (namestring (truename (password-directory password-interface))))))
+    (mapcar #'(lambda (x)
+                (subseq (namestring x) dir-length (- (length (namestring x)) 4)))
             raw-list)))
+
 
 (defmethod clip-password ((password-interface password-store-interface) password-name)
   (clip-password-string (with-open-stream (st (make-string-output-stream))
