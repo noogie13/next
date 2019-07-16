@@ -13,8 +13,8 @@
 (defclass keepassxc-interface (password-interface)
   ((password-file :reader password-file
                   :initarg :file)
-   (password :accessor password
-             :initarg :password
+   (password :accessor master-password
+             :initarg :master-password
              :initform nil)))
 
 (defgeneric list-passwords (password-interface)
@@ -92,11 +92,12 @@
 
 (define-command copy-password ()
   "Copy chosen password from minibuffer."
-  (with-password (password *interface*)
+  (with-password (password-interface *interface*)
     (with-result (password-name (read-from-minibuffer
                                  (minibuffer *interface*)
-                                 :completion-function (copy-password-completion-fn (password *interface*))))
-      (clip-password (password *interface*) password-name))))
+                                 :completion-function (copy-password-completion-fn
+                                                       (password-interface *interface*))))
+      (clip-password (password-interface *interface*) password-name))))
 
 (defun generate-input-html-original (input-buffer cursor-index)
   (cond ((equal "" input-buffer) (cl-markup:markup (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
@@ -117,13 +118,13 @@
                                (:span (subseq input-buffer-password (+ 1  cursor-index))))))))
 
 (define-command save-new-password ()
-  "Saves password to password interface."
+  "Save password to password interface."
   (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
   (with-result* ((password-name (read-from-minibuffer
                                  (minibuffer *interface*)
                                  :input-prompt "Name for new password:"))
-                 (password (read-from-minibuffer
+                 (master-password (read-from-minibuffer
                             (minibuffer *interface*)
                             :input-prompt "New password:")))
-    (save-password (password *interface*) password-name password)
+    (save-password (password-interface *interface*) password-name master-password)
     (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))))
