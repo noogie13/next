@@ -72,13 +72,13 @@
 (defmethod list-passwords ((password-interface keepassxc-interface))
   (let* ((st (make-string-input-stream (password password-interface)))
          (output (uiop:run-program `("keepassxc-cli" "ls" ,(password-file password-interface))
-                                   :input st :output '(:string :stipped t))))
+                                   :input st :output '(:string :stripped t))))
     (remove "Recycle Bin/" (rest (cl-ppcre:split "\\n" output)) :test #'equal)))
 
 (defmethod clip-password ((password-interface keepassxc-interface) password-name)
   (let* ((st (make-string-input-stream (password password-interface)))
          (output (uiop:run-program `("keepassxc-cli" "show" ,(password-file password-interface) ,password-name)
-                                   :input st :output '(:string :stipped t))))
+                                   :input st :output '(:string :stripped t))))
     (clip-password-string
      (cl-ppcre:regex-replace "[\\S\\s]*Password: \(.*\)[\\S\\s]*" output "\\1"))))
 
