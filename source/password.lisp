@@ -14,8 +14,8 @@
   ((password-file :reader password-file
                   :initarg :file)
    (master-password :accessor master-password
-             :initarg :master-password
-             :initform nil)))
+                    :initarg :master-password
+                    :initform nil)))
 
 (defgeneric list-passwords (password-interface)
   (:documentation "Retrieve all available passwords."))
@@ -48,9 +48,7 @@
 
 
 (defmethod clip-password ((password-interface password-store-interface) password-name)
-  (clip-password-string (with-open-stream (st (make-string-output-stream))
-                          (uiop:run-program `("pass" "show" ,password-name) :output st)
-                          (get-output-stream-string st))))
+  (clip-password-string (uiop:run-program `("pass" "show" ,password-name) :output '(:string :stripped t))))
 
 (defmethod save-password ((password-interface password-store-interface) password-name password)
   (with-open-stream (st (make-string-input-stream password))
@@ -60,31 +58,29 @@
 (defmacro with-password (password-interface &body body)
   `(if (eq 'keepassxc-interface (type-of ,password-interface))
        (if (null (password ,password-interface))
-        (progn
-          (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
-          (with-result (password-set (read-from-minibuffer
-                                      (minibuffer *interface*)
-                                      :input-prompt "Password:"))
-            (setf (password ,password-interface) password-set)
-            (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))
-            ,@body))
-        ,@body)
+           (progn
+             (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
+             (with-result (password-set (read-from-minibuffer
+                                         (minibuffer *interface*)
+                                         :input-prompt "Password:"))
+               (setf (password ,password-interface) password-set)
+               (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))
+               ,@body))
+           ,@body)
        ,@body))
 
 (defmethod list-passwords ((password-interface keepassxc-interface))
-  (let ((st (make-string-input-stream (password password-interface)))
-        (output-st (make-string-output-stream)))
-    (uiop:run-program `("keepassxc-cli" "ls" ,(password-file password-interface))
-                      :input st :output output-st)
-    (remove "Recycle Bin/" (rest (cl-ppcre:split "\\n" (get-output-stream-string output-st))) :test #'equal)))
+  (let* ((st (make-string-input-stream (password password-interface)))
+         (output (uiop:run-program `("keepassxc-cli" "ls" ,(password-file password-interface))
+                                   :input st :output '(:string :stipped t))))
+    (remove "Recycle Bin/" (rest (cl-ppcre:split "\\n" output)) :test #'equal)))
 
 (defmethod clip-password ((password-interface keepassxc-interface) password-name)
-  (let ((st (make-string-input-stream (password password-interface)))
-        (output-st (make-string-output-stream)))
-    (uiop:run-program `("keepassxc-cli" "show" ,(password-file password-interface) ,password-name)
-                      :input st :output output-st)
+  (let* ((st (make-string-input-stream (password password-interface)))
+         (output (uiop:run-program `("keepassxc-cli" "show" ,(password-file password-interface) ,password-name)
+                                   :input st :output '(:string :stipped t))))
     (clip-password-string
-     (cl-ppcre:regex-replace "[\\S\\s]*Password: \(.*\)[\\S\\s]*" (get-output-stream-string output-st) "\\1"))))
+     (cl-ppcre:regex-replace "[\\S\\s]*Password: \(.*\)[\\S\\s]*" output "\\1"))))
 
 ;;; Commands to wrap together.
 (defun copy-password-completion-fn (password-instance)
@@ -126,7 +122,7 @@
                                  (minibuffer *interface*)
                                  :input-prompt "Name for new password:"))
                  (master-password (read-from-minibuffer
-                            (minibuffer *interface*)
-                            :input-prompt "New password:")))
+                                   (minibuffer *interface*)
+                                   :input-prompt "New password:")))
     (save-password (password-interface *interface*) password-name master-password)
     (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))))
