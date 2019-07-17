@@ -58,15 +58,17 @@
 
 ;;; KeepassXC implementation.
 (defmacro with-password (password-interface &body body)
-  `(if (null (password ,password-interface))
-       (progn
-         (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
-         (with-result (password-set (read-from-minibuffer
-                                     (minibuffer *interface*)
-                                     :input-prompt "Password:"))
-           (setf (password ,password-interface) password-set)
-           (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))
-           ,@body))
+  `(if (eq 'keepassxc-interface (type-of ,password-interface))
+       (if (null (password ,password-interface))
+        (progn
+          (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
+          (with-result (password-set (read-from-minibuffer
+                                      (minibuffer *interface*)
+                                      :input-prompt "Password:"))
+            (setf (password ,password-interface) password-set)
+            (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))
+            ,@body))
+        ,@body)
        ,@body))
 
 (defmethod list-passwords ((password-interface keepassxc-interface))
