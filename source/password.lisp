@@ -13,7 +13,7 @@
 (defclass keepassxc-interface (password-interface)
   ((password-file :reader password-file
                   :initarg :file)
-   (password :accessor master-password
+   (master-password :accessor master-password
              :initarg :master-password
              :initform nil)))
 
