@@ -54,7 +54,9 @@
 brought up.  This can be useful to know which was the original buffer in the
 `callback-function' in case the buffer was changed.")
    (setup-function :accessor setup-function)
-   (cleanup-function :accessor cleanup-function)
+   (cleanup-function :accessor cleanup-function
+                     :documentation "Function run after a completion has been selected.
+This should not rely on the minibuffer's content.")
    (empty-complete-immediate :accessor empty-complete-immediate)
    (display-mode :accessor display-mode :initform :nil)
    (input-prompt :accessor input-prompt :initform "Input:")
@@ -112,6 +114,10 @@ brought up.  This can be useful to know which was the original buffer in the
 
 (define-command return-input (minibuffer-mode &optional (minibuffer (minibuffer *interface*)))
   "Return with minibuffer selection."
+  ;; Warning: `hide' modifies the content of the minibuffer, the
+  ;; callback-function and the cleanup-function cannot rely on the minibuffer
+  ;; content safely.
+  (hide *interface*)
   (setf (display-mode minibuffer) :nil)
   (with-slots (callback-function cleanup-function
                empty-complete-immediate completions completion-cursor)
@@ -128,9 +134,7 @@ brought up.  This can be useful to know which was the original buffer in the
         ;; if there's no completion function
         (return-immediate (first (modes minibuffer)) minibuffer))
     (when cleanup-function
-      (funcall cleanup-function)))
-  ;; `hide' could modify the content of the minibuffer, let's call it last.
-  (hide *interface*))
+      (funcall cleanup-function))))
 
 (define-command return-immediate (minibuffer-mode &optional (minibuffer (minibuffer *interface*)))
   "Return with minibuffer input, ignoring the selection."
@@ -187,21 +191,22 @@ brought up.  This can be useful to know which was the original buffer in the
   (let ((active-window (rpc-window-active interface)))
     (setf (minibuffer-active active-window) nil)
     ;; TODO: We need a mode-line before we can afford to really hide the
-    ;; minibuffer.  Until then, we make it blank with erase-document.
-    (with-result (url (buffer-get-url))
-      (echo "~a" url))
+    ;; minibuffer.  Until then, we use "blank" it.
+    (with-result* ((url (buffer-get-url))
+                   (title (buffer-get-title)))
+      (echo "~a — ~a" url title))
     (rpc-window-set-minibuffer-height interface
                                       active-window
                                       (minibuffer-closed-height active-window))))
 
 (defun insert (characters &optional (minibuffer (minibuffer *interface*)))
-    (setf (input-buffer minibuffer)
-          (cl-strings:insert characters
-                             (input-buffer minibuffer)
-                             :position (input-buffer-cursor minibuffer)))
-    (incf (input-buffer-cursor minibuffer) (length characters))
-    (setf (completion-cursor minibuffer) 0)
-    (update-display minibuffer))
+  (setf (input-buffer minibuffer)
+        (cl-strings:insert characters
+                           (input-buffer minibuffer)
+                           :position (input-buffer-cursor minibuffer)))
+  (incf (input-buffer-cursor minibuffer) (length characters))
+  (setf (completion-cursor minibuffer) 0)
+  (update-display minibuffer))
 
 (define-command self-insert (minibuffer-mode)
   "Insert key-chord-stack in MINIBUFFER."
@@ -357,11 +362,16 @@ brought up.  This can be useful to know which was the original buffer in the
 
 (defmethod update-display ((minibuffer minibuffer))
   (with-slots (input-buffer input-buffer-cursor completion-function
-               completions completion-cursor)
+               completions completion-cursor empty-complete-immediate)
       minibuffer
     (if completion-function
         (setf completions (funcall completion-function input-buffer))
         (setf completions nil))
+    (when (and empty-complete-immediate
+               (not (str:emptyp input-buffer)))
+      ;; Don't add input-buffer to completions that don't accept arbitrary
+      ;; inputs (i.e. empty-complete-immediate is nil).
+      (push input-buffer completions))
     (let ((input-text (generate-input-html input-buffer input-buffer-cursor))
           (completion-html (generate-completion-html completions completion-cursor)))
       (rpc-minibuffer-evaluate-javascript
@@ -431,7 +441,7 @@ interpreted by `format'. "
                         (:head (:style style))
                         (:body
                          (:p (apply #'format nil args)))))))
-        (log:warn "Can't echo ~a without minibuffer or interface" args))))
+        (log:warn "Can't echo '~a' without minibuffer or interface" (apply #'format nil args)))))
 
 (defmethod echo-dismiss ((minibuffer minibuffer))
   (when (eql (display-mode minibuffer) :echo)

@@ -22,7 +22,7 @@ mode map, which are
   \"C-x\" \"C-s\"         - set to \"prefix\"
   \"C-x\"                 - set to \"prefix\"
 
-When a key is set to \"prefix\" it will not consume the stack, so that a
+When a key is set to #'prefix it will not consume the stack, so that a
 sequence of keys longer than one key-chord can be recorded."
   (let ((key-sequence (key key-sequence-string)))
     (setf (gethash key-sequence (table map)) command)
@@ -56,6 +56,21 @@ sequence of keys longer than one key-chord can be recorded."
 (defun serialize-key-chord-stack (key-chord-stack &key normalize)
   (mapcar (lambda (k) (serialize-key-chord k :normalize normalize))
           key-chord-stack))
+
+;; TODO: Ideally, we wouldn't need the serialized intermediary representation
+;; and we could remove this function altogether.
+(defun stringify (serialized-key-stack)
+  "Return string representation of a serialized key-chord stack.
+E.g. print ((nil - C) (nil x C)) as \"C-x C--\".
+This is effectively the inverse of `serialize-key-chord-stack'."
+  (format nil "~{~a~^ ~}"
+          (mapcar (lambda (serialized-key-chord)
+                    (format nil "~{~a~^-~}"
+                            (reverse
+                             ;; We work over rest to ignore keycode, since it's always
+                             ;; nil in this implementation.
+                             (rest serialized-key-chord))))
+                  (reverse serialized-key-stack))))
 
 (defun current-keymaps (window)
   "Return the list of (keymap . mode) for the current buffer, ordered by priority."
@@ -126,15 +141,16 @@ it can be called without argument."
         (when active-buffer
           (setf (last-key-chords active-buffer) (list key-chord)))
         (cond
+          ;; prefix binding
           ((eq bound-function #'prefix)
            (log:debug "Prefix binding"))
-
+          ;; function bound
           ((functionp bound-function)
            (log:debug "Key sequence ~a bound to:"
                       (serialize-key-chord-stack (key-chord-stack *interface*)))
            (funcall bound-function)
            (setf (key-chord-stack *interface*) nil))
-
+          ;; minibuffer is active
           ((minibuffer-active active-window)
            (if (member-string "R" (key-chord-modifiers (first (key-chord-stack *interface*))))
                (progn
@@ -145,15 +161,15 @@ it can be called without argument."
                                                        (first (key-chord-stack *interface*))))
                  (insert (key-chord-key-string (first (key-chord-stack *interface*))))))
            (setf (key-chord-stack *interface*) nil))
-
+          ;; forward back to the platform port
           ((or (and active-buffer (forward-input-events-p active-buffer))
                (pointer-event-p key-chord))
            ;; forward-input-events-p is NIL in VI normal mode so that we don't
            ;; forward unbound keys, unless it's a pointer (mouse) event.
            ;; TODO: Remove this special case and bind button1 to "self-insert" instead?
            (rpc-generate-input-event *interface*
-                                   active-window
-                                   key-chord)
+                                     active-window
+                                     key-chord)
            (setf (key-chord-stack *interface*) nil))
           (t (setf (key-chord-stack *interface*) nil)))))))
 
@@ -172,7 +188,7 @@ with MODE, it does not have any effect on KEYMAP.
 
 Examples:
 
-  (define-key \"C-x C-c\" 'kill)
+  (define-key \"C-x C-c\" 'quit)
   (define-key \"C-n\" 'scroll-down
               :mode 'document-mode)
   ;; Only affect the first mode of the current buffer:
@@ -203,7 +219,10 @@ Examples:
                      (setf (getf map-scheme scheme) map)
                      map-scheme)))
            (when (keymapp keymap)
-             (set-key keymap key-sequence-string command))))
+             (set-key keymap key-sequence-string command)))
+  ;; Reset map so that bindings are properly updated when displayed in the
+  ;; minibuffer.
+  (clrhash %%command-key-bindings))
 
 (defun key (key-sequence-string)
   "Turn KEY-SEQUENCE-STRING into a sequence of serialized key-chords.

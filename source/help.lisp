@@ -22,16 +22,13 @@
              (push s l))))
 
 (defun variable-complete (input)
-  (fuzzy-match input (package-variables) :accessor-function #'symbol-name))
+  (fuzzy-match input (package-variables)))
 
 (defun function-complete (input)
-  (fuzzy-match input (list-commands)
-               :accessor-function #'(lambda (c)
-                                      (closer-mop:generic-function-name
-                                       (closer-mop:method-generic-function c)))))
+  (fuzzy-match input (mapcar #'command-symbol (list-commands))))
 
-;; TODO: This is barely useful as is since we don't have any global.  We need to
-;; augment the latter function so that we can inspect *INTERFACE* and classes.
+;; TODO: This is barely useful as is since we don't have many globals.  We need to
+;; augment the latter function so that we can inspect classes like remote-interface.
 (define-command variable-inspect ()
   "Inspect a variable and show it in a help buffer."
   (with-result (input (read-from-minibuffer
@@ -59,18 +56,19 @@
                        (minibuffer *interface*)
                        :input-prompt "Inspect command:"
                        :completion-function 'function-complete))
-    (let* ((input-sym (closer-mop:generic-function-name
-                       (closer-mop:method-generic-function input)))
-
-           (help-buffer (make-buffer
-                         :name (concatenate 'string "HELP-" (symbol-name input-sym))
+    (let* ((help-buffer (make-buffer
+                         :name (str:concat "*Help-" (symbol-name input) "*")
                          :default-modes (cons 'help-mode
                                               (get-default 'buffer 'default-modes))))
            (help-contents (cl-markup:markup
-                           (:h1 (symbol-name input-sym))
+                           (:h1 (symbol-name input))
                            (:h2 "Documentation")
                            (:p (write-to-string
-                                (documentation input t)))))
+                                ;; TODO: This only display the first method, i.e. the first command of one of the modes.
+                                ;; Ask for modes instead?
+                                (documentation (first (closer-mop:generic-function-methods
+                                                       (symbol-function input)))
+                                               t)))))
            (insert-help (ps:ps (setf (ps:@ document Body |innerHTML|)
                                      (ps:lisp help-contents)))))
       (rpc-buffer-evaluate-javascript *interface* help-buffer insert-help)
@@ -107,6 +105,67 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
                                         (ps:lisp result-contents)))))
       (rpc-buffer-evaluate-javascript *interface* result-buffer insert-results)
       (set-active-buffer *interface* result-buffer))))
+
+(define-command help ()
+  "Print some help."
+  (let* ((help-buffer (make-buffer
+                       :name "*Help*"
+                       :default-modes (cons 'help-mode
+                                            (get-default 'buffer 'default-modes))))
+         (help-contents
+           (cl-markup:markup
+            (:h1 "Getting started")
+            (:p (:b "Warning: ") "Next is under active development. Feel free to "
+                (:a :href "https://github.com/atlas-engineer/next/issues"
+                    "report")
+                " bugs, instabilities or feature wishes.")
+            (:h2 "Quickstart keys")
+            (:ul
+             (:li (:code "C-l") ": Load URL in tab")
+             (:li (:code "M-l") ": Load URL in new tab")
+             (:li (:code "C-x b") ", " (:code "C-x left/right") ": Switch tab")
+             (:li (:code "C-b")  ": Backwards history")
+             (:li (:code "C-f")  ": Forwards history")
+             (:li (:code "C-g")  ": Follow link in current buffer")
+             (:li (:code "M-g") ": Follow link in new buffer")
+             (:li (:code "C-x C-c")  ": Quit")
+             (:li (:code "M-x")  ": Run a command by name"))
+            (:p "With VI bindings:")
+            (:ul
+             (:li (:code "o") ": Load URL in tab")
+             (:li (:code "O") ": Load URL in new tab")
+             (:li (:code "g b") ", " (:code "[") ", " (:code "]") ": Switch tab")
+             (:li (:code "H")  ": Backwards history")
+             (:li (:code "L")  ": Forwards history")
+             (:li (:code "f")  ": Follow link in current buffer")
+             (:li (:code "F") ": Follow link in new buffer")
+             (:li (:code "C-x C-c")  ": Quit")
+             (:li (:code ":")  ": Run a command by name"))
+            (:p "The following keys exist as special keys:")
+            (:ul
+             (:li (:code "C") ": Control key")
+             (:li (:code "S") ": Super (Windows key, Command key)")
+             (:li (:code "M") ": Meta (Alt key, Option key)"))
+            (:h2 "Customize and extend Next")
+            (:p "Customization is possible through the creation of a "
+                (:code "~/.config/next/init.lisp")
+                " file. From here you can override and redefine any of the functions by defining your init file as part of the "
+                (:code ":next")
+                " package. For more information please see: "
+                (:a :href "https://next.atlas.engineer/documentation#customization"
+                    "customizing Next" )
+                ".")
+            (:h2 "Documentation")
+            (:p "For full documentation about Next, how it works, and how to extend it please see the "
+                (:a :href " <a href=\"https://next.atlas.engineer/documentation\">"
+                    "user manual")
+                ".")))
+
+         (insert-help (ps:ps (setf (ps:@ document Body |innerHTML|)
+                                   (ps:lisp help-contents)))))
+      (rpc-buffer-evaluate-javascript *interface* help-buffer insert-help)
+    (set-active-buffer *interface* help-buffer)
+    help-buffer))
 
 (define-command next-version ()
   "Version number of this version of Next.

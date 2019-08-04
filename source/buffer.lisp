@@ -21,9 +21,14 @@ See the `make-buffer' function for Lisp code."
   (make-buffer :name name :default-modes modes))
 
 (defun buffer-completion-fn ()
-  (let ((buffers (alexandria:hash-table-values (buffers *interface*))))
+  (let ((buffers (alexandria:hash-table-values (buffers *interface*)))
+        (active-buffer (active-buffer *interface*)))
+    ;; For commodity, the current buffer shouldn't be the first one on the list.
+    (when (equal (first buffers)
+                 active-buffer)
+      (setf buffers (alexandria:rotate buffers -1)))
     (lambda (input)
-      (fuzzy-match input buffers :accessor-function #'name))))
+      (fuzzy-match input buffers))))
 
 (define-command switch-buffer ()
   "Switch the active buffer in the current window."
@@ -47,7 +52,7 @@ See the `make-buffer' function for Lisp code."
                         :completion-function (buffer-completion-fn)))
     (rpc-buffer-delete *interface* buffer)))
 
-(define-command delete-active-buffer ()
+(define-command delete-current-buffer ()
   "Delete the currently active buffer, and make the next buffer the
 visible buffer. If no other buffers exist, set the url of the current
 buffer to the start page."

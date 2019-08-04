@@ -8,27 +8,31 @@
   :serial t
   :defsystem-depends-on ("trivial-features")
   :depends-on (:alexandria
-               :cl-strings
-               :str
-               :cl-string-match
-               :quri
-               :sqlite
-               :parenscript
-               :cl-json
-               :swank
-               :cl-markup
-               :cl-css
                :bordeaux-threads
-               :unix-opts
-               :trivial-clipboard
-               :log4cl
+               :cl-css
+               :cl-json
+               :cl-markup
+               :cl-ppcre
+               :cl-ppcre-unicode
+               :cl-string-match
+               :cl-strings
                :closer-mop
-               :ironclad
                :dbus
                :dexador
-               :download-manager
+               :ironclad
+               :log4cl
                :lparallel
-               :trivia)
+               :mk-string-metrics
+               :parenscript
+               :quri
+               :sqlite
+               :str
+               :swank
+               :trivia
+               :trivial-clipboard
+               :unix-opts
+               ;; Local systems:
+               :download-manager)
   :components ((:module "source"
                 :components
                 (;; Core Functionality
@@ -64,6 +68,7 @@
                  ;; About
                  (:file "about")
                  ;; Port Compatibility Layers
+                 (:file "ports/pyqt-webengine" :if-feature :darwin)
                  (:file "ports/gtk-webkit" :if-feature (:and :unix (:not :darwin)))
                  ;; Base
                  (:file "base"))))
@@ -72,11 +77,11 @@
   :entry-point "next:entry-point")
 
 (asdf:defsystem download-manager
-  :depends-on (lparallel
-               log4cl
+  :depends-on (cl-ppcre
                dexador
+               log4cl
+               lparallel
                quri
-               cl-ppcre
                str)
   :components ((:module source :pathname "libraries/download-manager/"
                 :components ((:file "package")

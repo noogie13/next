@@ -46,7 +46,8 @@
                              ") "
                              (:u (quri:render-uri (download-manager:resolved-uri d)))
                              " as "
-                             (:b (file-namestring (download-manager:file d)))))))))
+                             (:b (file-namestring (download-manager:file d)))))))
+                    (:p (:em "Open a file with " (:code "M-x download-open-file") "."))))
          (insert-content (ps:ps (setf (ps:@ document Body |innerHTML|)
                                       (ps:lisp contents)))))
     (rpc-buffer-evaluate-javascript interface download-buffer insert-content)
@@ -65,9 +66,44 @@
     (unless (find-buffer 'download-mode)
       (download-list (make-instance 'root-mode)))))
 
-(define-command download-anchor-url (root-mode &optional (interface *interface*))
+(define-command download-hint-url (root-mode &optional (interface *interface*))
   "Download the file under the URL hinted by the user."
-  (query-anchors "Download link URL:" (selected-link)
+  (query-hints "Download link URL:" (selected-link)
     (download interface selected-link)
     (unless (find-buffer 'download-mode)
       (download-list (make-instance 'root-mode)))))
+
+(defun get-downloaded-filenames (interface)
+  "Return the list of downloaded filenames of the current session, as strings."
+  (mapcar #'download-manager:filename (downloads interface)))
+
+(defun downloaded-files-completion-fn (interface)
+  (let ((filenames (get-downloaded-filenames interface)))
+    (lambda (input)
+      (fuzzy-match input filenames))))
+
+(defun open-file-default (filename)
+  "Open this file with `xdg-open'."
+  (handler-case (uiop:run-program (list "xdg-open" filename))
+    ;; We can probably signal something and display a notification.
+    (error (c) (format *error-output* "Error opening ~a: ~a~&" filename c))))
+
+;; TODO: Remove `open-file` (it's just a one-liner) and instead store the
+;; "open-file-function" into a download-mode slot, which is then called from
+;; `download-open-file' with `(funcall (open-file-function download-mode)
+;; filename).
+(defun open-file (filename)
+  "Open this file. `filename' is the full path of the file, as a string.
+By default, try to open it with the system's default external program, using `xdg-open'.
+The user can override this function to decide what to do with the file."
+  (open-file-default filename))
+
+(define-command download-open-file (root-mode &optional (interface *interface*))
+  "Open a downloaded file.
+Ask the user to choose one of the downloaded files of the current session.
+See also `open-file'."
+  (with-result (filename (read-from-minibuffer
+                          (minibuffer *interface*)
+                          :input-prompt "Open file:"
+                          :completion-function (downloaded-files-completion-fn interface)))
+    (open-file filename)))

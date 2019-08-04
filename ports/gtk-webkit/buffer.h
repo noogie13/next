@@ -334,7 +334,7 @@ gboolean buffer_web_view_decide_policy(WebKitWebView *web_view,
 		NULL,
 		(GAsyncReadyCallback)buffer_set_uri, args);
 
-	// Keep a reference on the decision so that in won't be freed before the callback.
+	// Keep a reference on the decision so that it won't be freed before the callback.
 	g_object_ref(decision);
 	return TRUE;
 }
@@ -416,6 +416,10 @@ void buffer_mouse_target_changed(WebKitWebView *web_view,
 
 Buffer *buffer_init(const char *cookie_file) {
 	Buffer *buffer = calloc(1, sizeof (Buffer));
+	if (buffer == NULL) {
+		g_error("Failed to allocate buffer");
+		exit(1);
+	}
 	WebKitWebContext *context = webkit_web_context_new();
 	webkit_web_context_set_process_model(context, WEBKIT_PROCESS_MODEL_MULTIPLE_SECONDARY_PROCESSES);
 	webkit_web_context_set_cache_model(context, WEBKIT_CACHE_MODEL_WEB_BROWSER);

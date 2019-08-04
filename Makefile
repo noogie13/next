@@ -1,10 +1,10 @@
-## We use some Bourne shell syntax.
+## Use Bourne shell syntax.
 SHELL = /bin/sh
+UNAME := $(shell uname)
 
 LISP ?= sbcl
-LISP_FLAGS ?= --no-userinit
-## If you want to enable SBCL's user init file:
-# LISP_FLAGS =
+## We use --non-interactive with SBCL so that errors don't interrupt the CI.
+LISP_FLAGS ?= --no-userinit --non-interactive
 
 NEXT_INTERNAL_QUICKLISP = true
 
@@ -12,6 +12,7 @@ PREFIX = /usr/local
 prefix = $(PREFIX)
 BINDIR = $(PREFIX)/bin
 DATADIR = $(PREFIX)/share
+APPLICATIONSDIR = /Applications
 
 .PHONY: help
 help:
@@ -30,12 +31,33 @@ next: $(lisp_files)
 		--eval '(asdf:make :next)' \
 		--eval '(uiop:quit)'
 
+.PHONY: app-bundle
+app-bundle: next
+	mkdir -p ./Next.app/Contents/MacOS
+	mkdir -p ./Next.app/Resources
+	mv ./next ./Next.app/Contents/MacOS
+	cp -r ./ports/pyqt-webengine/ ./Next.app/Contents/MacOS
+	mv ./Next.app/Contents/MacOS/next-pyqt-webengine.py ./Next.app/Contents/MacOS/next-pyqt-webengine
+	chmod +x ./Next.app/Contents/MacOS/next-pyqt-webengine
+	cp ./assets/Info.plist ./Next.app/Contents
+	cp ./assets/next.icns ./Next.app/Resource
+
+.PHONY: install-app-bundle
+install-app-bundle:
+	cp -r Next.app $(DESTDIR)/Applications
+
 .PHONY: gtk-webkit
 gtk-webkit:
 	$(MAKE) -C ports/gtk-webkit
 
 .PHONY: all
+all:
+ifeq ($(UNAME), Linux)
 all: next gtk-webkit
+endif
+ifeq ($(UNAME), Darwin)
+all: app-bundle
+endif
 
 .PHONY: install-gtk-webkit
 install-gtk-webkit: gtk-webkit
@@ -74,7 +96,14 @@ install-next: next
 	chmod 755 "$(DESTDIR)$(BINDIR)/"$<
 
 .PHONY: install
+install:
+install:
+ifeq ($(UNAME), Linux)
 install: install-next install-gtk-webkit install-assets
+endif
+ifeq ($(UNAME), Darwin)
+install: install-app-bundle
+endif
 
 .PHONY: clean
 clean:
@@ -102,6 +131,27 @@ deps: $(QUICKLISP_DIR)/setup.lisp
 	$(LISP) $(LISP_FLAGS) \
 		--eval '(require "asdf")' \
 		--load $< \
+		--eval '(ql:quickload :trivial-features)' \
+		--eval '(ql:quickload :prove-asdf)' \
+		--load next.asd \
+		--eval '(ql:quickload :next)' \
+		--eval '(uiop:quit)'
+
+## TODO: Always call quicklisp-update?  Then update documentation accordingly.
+.PHONY: quicklisp-update
+quicklisp-update: $(QUICKLISP_DIR)/setup.lisp
+	$(LISP) $(LISP_FLAGS) \
+		--load $(QUICKLISP_DIR)/setup.lisp \
+		--eval '(require "asdf")' \
+		--eval '(ql:update-dist "quicklisp" :prompt nil)' \
+		--eval '(uiop:quit)'
+
+# Testing that next loads is a first test.
+test: $(lisp_files)
+	$(NEXT_INTERNAL_QUICKLISP) && $(MAKE) deps || true
+	env NEXT_INTERNAL_QUICKLISP=$(NEXT_INTERNAL_QUICKLISP) $(LISP) $(LISP_FLAGS) \
+		--eval '(require "asdf")' \
+		--eval '(when (string= (uiop:getenv "NEXT_INTERNAL_QUICKLISP") "true") (load "$(QUICKLISP_DIR)/setup.lisp"))' \
 		--eval '(ql:quickload :trivial-features)' \
 		--eval '(ql:quickload :prove-asdf)' \
 		--load next.asd \

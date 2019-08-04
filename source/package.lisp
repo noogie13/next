@@ -4,7 +4,9 @@
 
 (defpackage next
   (:use :common-lisp)
-  (:import-from :trivia :match)
+  (:use :trivia)
   (:export
    #:start
-   #:entry-point))
+   #:entry-point
+   #:fuzzy-match
+   #:open-file))

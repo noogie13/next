@@ -36,10 +36,14 @@ Set to '-' to read standard input instead."))
 ;; TODO: Find a way to list/introspect available platform port methods from a
 ;; running Next.
 
-(define-command kill ()
+(define-command quit ()
   "Quit Next."
   (kill-interface *interface*)
   (kill-program (port *interface*)))
+
+(define-deprecated-command kill ()
+  "Deprecated by `quit'."
+  (quit (make-instance 'root-mode)))
 
 (defun set-debug-level (level)
   "Supported values for LEVEL are
@@ -82,7 +86,7 @@ Set to '-' to read standard input instead."))
           (format t "Bye!~&")
           (uiop:quit)))))
 
-(defun ping-platform-port (&optional (bus-type (dbus:session-server-addresses)))
+(defun ping-platform-port (&optional (bus-type (session-server-addresses)))
   (dbus:with-open-bus (bus bus-type)
     (member-string +platform-port-name+ (dbus:list-names bus))))
 
@@ -101,31 +105,38 @@ Set to '-' to read standard input instead."))
                      "Make sure the platform port executable is either in the
 PATH or set in you ~/.config/next/init.lisp, for instance:
 
-(setf (get-default 'port 'path)
-      \"~/common-lisp/next/ports/gtk-webkit/next-gtk-webkit\")")
+     (setf (get-default 'port 'path)
+         \"~/common-lisp/next/ports/gtk-webkit/next-gtk-webkit\")")
           (uiop:quit))))
     (let ((max-attempts (/ (platform-port-poll-duration interface)
-                          (platform-port-poll-interval interface))))
+                           (platform-port-poll-interval interface))))
       ;; Poll the platform port in case it takes some time to start up.
       (loop while (not port-running)
             repeat max-attempts
             do (unless (setf port-running (ping-platform-port))
                  (sleep (platform-port-poll-interval interface))))
+      ;; TODO: MAKE-WINDOW should probably take INTERFACE as argument.
       (if port-running
-          ;; TODO: MAKE-WINDOW should probably take INTERFACE as argument.
-          (let ((buffer (nth-value 1 (make-window))))
-            (set-url-buffer (if urls
-                                (first urls)
-                                (start-page-url interface))
-                            buffer)
-            ;; We can have many URLs as positional arguments.
-            (loop for url in (rest urls) do
-              (let ((buffer (make-buffer)))
-                (set-url-buffer url buffer))))
+          (if urls
+              (let ((buffer (nth-value 1 (make-window))))
+                (set-url-buffer (first urls) buffer)
+                ;; We can have many URLs as positional arguments.
+                (loop for url in (rest urls) do
+                  (let ((buffer (make-buffer)))
+                    (set-url-buffer url buffer))))
+              ;; TODO: Make startup function customizable.
+              ;; TODO: Test if network is available.  If not, display help,
+              ;; otherwise display start-page-url.
+              (let ((window (rpc-window-make *interface*))
+                    (buffer (help (make-instance 'root-mode))))
+                (window-set-active-buffer *interface* window buffer)))
           (progn
             (log:error "Could not connect to platform port: ~a" (path (port interface)))
-            (kill-program (port interface))
-            (kill-interface interface)
+            (handler-case
+                (progn
+                  (kill-program (port interface))
+                  (kill-interface interface))
+              (error (c) (format *error-output* "~a" c)))
             (uiop:quit))))))
 
 (defun init-file-path (&optional (file "init.lisp"))
@@ -172,9 +183,6 @@ If FILE is \"-\", read from the standard input."
   (setf *random-state* (make-random-state t))
   (load-lisp-file (init-file-path))
   ;; create the interface object
-  (unless (eq swank:*communication-style* :fd-handler)
-    (log:warn "swank:*communication-style* is set to ~s, recommended value is :fd-handler"
-              swank:*communication-style*))
   (when *interface*
     (kill-interface *interface*)
     ;; It's important to set it to nil or else if we re-run this function,
@@ -186,19 +194,21 @@ If FILE is \"-\", read from the standard input."
   ;; an instance is already running.
   (initialize-port *interface* (or urls *free-args*)))
 
-(define-key "C-x C-c" 'kill)
+(define-key "C-x C-c" 'quit)
 (define-key "C-[" 'switch-buffer-previous)
 (define-key "C-]" 'switch-buffer-next)
 (define-key "C-x b" 'switch-buffer)
 (define-key "C-x k" 'delete-buffer)
 (define-key "C-x Left" 'switch-buffer-previous)
 (define-key "C-x Right" 'switch-buffer-next)
+(define-key "C-Page_Up" 'switch-buffer-previous)
+(define-key "C-Page_Down" 'switch-buffer-next)
 (define-key "C-l" 'set-url-current-buffer)
 (define-key "M-l" 'set-url-new-buffer)
 (define-key "C-m k" 'bookmark-delete)
 (define-key "C-t" 'make-visible-new-buffer)
 (define-key "C-m u" 'bookmark-url)
-(define-key "C-x w" 'delete-active-buffer)
+(define-key "C-x C-k" 'delete-current-buffer)
 ;; TODO: Rename to inspect-variable?  Wouldn't describe-variable be more familiar?
 (define-key "C-h v" 'variable-inspect)
 (define-key "C-h c" 'command-inspect)
@@ -210,12 +220,14 @@ If FILE is \"-\", read from the standard input."
 (define-key "C-x q" (lambda () (echo-dismiss (minibuffer *interface*))))
 
 (define-key :scheme :vi-normal
-  "Z Z" 'kill
+  "Z Z" 'quit
   "[" 'switch-buffer-previous
   "]" 'switch-buffer-next
+  "C-Page_Up" 'switch-buffer-previous
+  "C-Page_Down" 'switch-buffer-next
   "g b" 'switch-buffer
   "d" 'delete-buffer
-  "D" 'delete-active-buffer
+  "D" 'delete-current-buffer
   "B" 'make-visible-new-buffer
   "o" 'set-url-current-buffer
   "O" 'set-url-new-buffer

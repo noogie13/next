@@ -31,9 +31,11 @@
              (gnu packages gtk)
              (gnu packages pkg-config)
              (gnu packages gcc)
-             (gnu packages webkit))
+             (gnu packages webkit)
+             ;; TODO: Get rid of the non-free dependencies.
+             (next packages lisp))
 
-(define %source-dir (dirname (current-filename)))
+(define %source-dir (dirname (dirname (current-filename))))
 
 (define git-file?
   (let* ((pipe (with-directory-excursion %source-dir
@@ -52,7 +54,7 @@
          (any (cut string-suffix? <> file) files))
         (_ #f)))))
 
-(define-public next-gtk-webkit
+(define next-gtk-webkit
   (package
     (name "next-gtk-webkit")
     (version "0.0.0")                   ; Because this can be checkout.
@@ -87,14 +89,38 @@ key-bindings, is fully configurable and extensible in Lisp, and has powerful
 features for productive professionals.")
     (license bsd-3)))
 
-(define-public sbcl-next
+(define sbcl-next-download-manager
   (package
     (inherit next-gtk-webkit)
-    (name "sbcl-next")
+    (name "sbcl-next-download-manager")
+    (build-system asdf-build-system/sbcl)
+    (arguments
+     `(#:tests? #f                      ; Need online access.
+       #:asd-file "next.asd"
+       #:asd-system-name "download-manager"))
+    (inputs
+     `(;; ASD libraries:
+       ("trivial-features" ,sbcl-trivial-features)
+       ;; Lisp libraries:
+       ("cl-ppcre" ,sbcl-cl-ppcre)
+       ("dexador" ,sbcl-dexador)
+       ("log4cl" ,sbcl-log4cl)
+       ("lparallel" ,sbcl-lparallel)
+       ("quri" ,sbcl-quri)
+       ("str" ,sbcl-cl-str)))
+    (native-inputs
+     `(("prove-asdf" ,sbcl-prove-asdf)))
+    (synopsis "Infinitely extensible web-browser (download manager)")))
+
+(define-public next
+  (package
+    (inherit next-gtk-webkit)
+    (name "next")
     (build-system asdf-build-system/sbcl)
     (outputs '("out" "lib"))
     (arguments
      `(#:tests? #f                      ; no tests
+       #:asd-system-name "next"
        #:phases (modify-phases %standard-phases
                   (add-after 'unpack 'patch-platform-port-path
                     (lambda* (#:key inputs #:allow-other-keys)
@@ -134,52 +160,41 @@ features for productive professionals.")
                                              (assoc-ref outputs "out"))))))))
     (inputs
      `(("next-gtk-webkit" ,next-gtk-webkit)
-       ;; Lisp libraries:
+       ;; ASD libraries:
        ("trivial-features" ,sbcl-trivial-features)
+       ("trivial-garbage" ,sbcl-trivial-garbage)
+       ;; Lisp libraries:
        ("alexandria" ,sbcl-alexandria)
-       ("closer-mop" ,sbcl-closer-mop)
-       ("find-port" ,sbcl-find-port)
-       ("log4cl" ,sbcl-log4cl)
-       ("cl-strings" ,sbcl-cl-strings)
-       ("cl-string-match" ,sbcl-cl-string-match)
-       ("puri" ,sbcl-puri)
-       ("sqlite" ,sbcl-cl-sqlite)
-       ("parenscript" ,sbcl-parenscript)
-       ("cl-json" ,sbcl-cl-json)
-       ("swank" ,sbcl-slime-swank)
-       ("cl-markup" ,sbcl-cl-markup)
-       ("cl-css" ,sbcl-cl-css)
        ("bordeaux-threads" ,sbcl-bordeaux-threads)
-       ("s-xml-rpc" ,sbcl-s-xml-rpc)
+       ("cl-css" ,sbcl-cl-css)
+       ("cl-json" ,sbcl-cl-json)
+       ("cl-markup" ,sbcl-cl-markup)
+       ("cl-ppcre" ,sbcl-cl-ppcre)
+       ("cl-ppcre-unicode" ,sbcl-cl-ppcre-unicode)
+       ("cl-string-match" ,sbcl-cl-string-match)
+       ("cl-strings" ,sbcl-cl-strings)
+       ("closer-mop" ,sbcl-closer-mop)
+       ("dbus" ,cl-dbus)
+       ("dexador" ,sbcl-dexador)
+       ("ironclad" ,sbcl-ironclad)
+       ("log4cl" ,sbcl-log4cl)
+       ("lparallel" ,sbcl-lparallel)
+       ("mk-string-metrics" ,sbcl-mk-string-metrics)
+       ("parenscript" ,sbcl-parenscript)
+       ("quri" ,sbcl-quri)
+       ("sqlite" ,sbcl-cl-sqlite)
+       ("str" ,sbcl-cl-str)
+       ("swank" ,sbcl-slime-swank)
+       ("trivia" ,sbcl-trivia)
+       ("trivial-clipboard" ,sbcl-trivial-clipboard)
        ("unix-opts" ,sbcl-unix-opts)
-       ("trivial-clipboard" ,sbcl-trivial-clipboard)))
+       ;; Local deps
+       ("next-download-manager" ,sbcl-next-download-manager)))
+    (native-inputs
+     `(("prove-asdf" ,sbcl-prove-asdf)))
     (synopsis "Infinitely extensible web-browser (with Lisp development files)")))
 
-;; TODO: For now, "next" is useless compared to sbcl-next because Guix keeps
-;; references to all SBCL inputs.  This is because the SBCL-generated executable
-;; embeds the absolute path to all Lisp libraries.
-(define-public next
-  (package
-    (inherit next-gtk-webkit)
-    (name "next")
-    (version (package-version next-gtk-webkit))
-    (build-system trivial-build-system)
-    (arguments
-     `(#:modules
-       ((guix build utils))
-       #:builder
-       (begin
-         (use-modules (guix build utils))
-         (let ((out (assoc-ref %outputs "out")))
-           (copy-recursively (assoc-ref %build-inputs "sbcl-next") out)
-           (delete-file-recursively (string-append out "/.asd-files"))
-           (delete-file (string-append out "/bin/next-exec.fasl")))
-         #t)))
-    (native-inputs
-     `(("sbcl-next" ,sbcl-next)))
-    (inputs
-     ;; TODO: Shouldn't sqlite be a dependency?
-     `(("next-gtk-webkit" ,next-gtk-webkit)))
-    (synopsis "Infinitely extensible web-browser")))
+(define-public sbcl-next
+  (deprecated-package "sbcl-next" next))
 
-sbcl-next
+next
