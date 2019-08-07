@@ -57,6 +57,9 @@
                  (:file "jump-heading")
                  (:file "link-hint")
                  (:file "help")
+                 (:file "password")
+                 (:file "password-keepassxc")
+                 (:file "password-pass")
                  ;; Core Modes
                  (:file "application-mode")
                  (:file "document-mode")
