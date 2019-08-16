@@ -40,9 +40,9 @@ keyword is not recognized.")))
                   :documentation "The list of symbols of class to
 instantiate on buffer creation, unless specified.")
    (current-keymap-scheme ; TODO: Name keymap-scheme instead?
-                          :initarg :current-keymap-scheme
-                          :initform :emacs
-                          :documentation "The keymap scheme that will be used
+    :initarg :current-keymap-scheme
+    :initform :emacs
+    :documentation "The keymap scheme that will be used
 for all modes in the current buffer.")
    (override-map :accessor override-map
                  :initarg :override-map
@@ -54,8 +54,8 @@ for all modes in the current buffer.")
 overrides all other bindings.  No libraries should ever touch the override-map,
 this is left for the user to customize to their needs.")
    (forward-input-events-p :accessor forward-input-events-p :initarg :forward-input-events-p
-                         :initform t
-                         :documentation "When non-nil, keyboard events are
+                           :initform t
+                           :documentation "When non-nil, keyboard events are
 forwarded to the platform port when no binding is found.  Pointer
 events (e.g. mouse events) are not affected by this, they are always
 forwarded when no binding is found.")
@@ -143,7 +143,12 @@ for the platform port to start up.")
 RPC endpoint of a platform-port to see if it is ready to begin accepting RPC
 commands.")
    (active-connection :accessor active-connection :initform nil)
-   (password-interface :accessor password-interface :initform (make-instance 'password-store-interface))
+   (password-interface :accessor password-interface
+                       :initform (cond ((executable-find "pass")
+                                        (make-instance 'password-store-interface))
+                                       ((executable-find "keepassxc-cli")
+                                        (make-instance 'keepassxc-interface))
+                                       (t nil)))
    (minibuffer :accessor minibuffer :initform (make-instance 'minibuffer)
                :documentation "The minibuffer object.")
    (windows :accessor windows :initform (make-hash-table :test #'equal))
@@ -160,7 +165,7 @@ commands.")
    (download-watcher :accessor download-watcher :initform nil
                      :documentation "List of downloads.")
    (download-directory :accessor download-directory :initform nil
-                     :documentation "Path of directory where downloads will be
+                       :documentation "Path of directory where downloads will be
 stored.  Nil means use system default.")))
 
 (defun download-watch ()
@@ -330,8 +335,8 @@ For an array of string, that would be \"as\"."
   (%rpc-send interface "window_exists" (id window)))
 
 (defmethod rpc-window-set-active-buffer ((interface remote-interface)
-                                      (window window)
-                                      (buffer buffer))
+                                         (window window)
+                                         (buffer buffer))
   (%rpc-send interface "window_set_active_buffer" (id window) (id buffer))
   (setf (active-buffer window) buffer))
 
@@ -373,7 +378,7 @@ For an array of string, that would be \"as\"."
   (%rpc-send interface "window_set_minibuffer_height" (id window) height))
 
 (defmethod rpc-buffer-make ((interface remote-interface)
-                          &key name default-modes)
+                            &key name default-modes)
   (let* ((buffer-id (get-unique-buffer-identifier interface))
          (buffer (apply #'make-instance 'buffer :id buffer-id
                         (append (when name `(:name ,name))
@@ -388,7 +393,7 @@ For an array of string, that would be \"as\"."
 (defmethod %get-inactive-buffer ((interface remote-interface))
   (let ((active-buffers
           (mapcar #'active-buffer
-                      (alexandria:hash-table-values (windows *interface*))))
+                  (alexandria:hash-table-values (windows *interface*))))
         (buffers (alexandria:hash-table-values (buffers *interface*))))
     (alexandria:last-elt (set-difference buffers active-buffers))))
 
@@ -408,25 +413,25 @@ For an array of string, that would be \"as\"."
   (%rpc-send interface "buffer_load" (id buffer) uri))
 
 (defmethod rpc-buffer-evaluate-javascript ((interface remote-interface)
-                                         (buffer buffer) javascript
-                                         &optional (callback nil))
+                                           (buffer buffer) javascript
+                                           &optional (callback nil))
   (let ((callback-id
           (%rpc-send interface "buffer_evaluate_javascript" (id buffer) javascript)))
     (setf (gethash callback-id (callbacks buffer)) callback)
     callback-id))
 
 (defmethod rpc-minibuffer-evaluate-javascript ((interface remote-interface)
-                                             (window window) javascript
-                                             &optional callback)
+                                               (window window) javascript
+                                               &optional callback)
   ;; JS example: document.body.innerHTML = 'hello'
   (let ((callback-id
-         (%rpc-send interface "minibuffer_evaluate_javascript" (id window) javascript)))
+          (%rpc-send interface "minibuffer_evaluate_javascript" (id window) javascript)))
     (setf (gethash callback-id (minibuffer-callbacks window)) callback)
     callback-id))
 
 (defmethod rpc-generate-input-event ((interface remote-interface)
-                                   (window window)
-                                   (event key-chord))
+                                     (window window)
+                                     (event key-chord))
   "For now, we only generate keyboard events.
 In the future, we could also support other input device events such as mouse
 events."
@@ -438,12 +443,12 @@ events."
               (key-chord-position event))
              (id window))
   (%rpc-send interface "generate_input_event"
-                 (id window)
-                 (key-chord-key-code event)
-                 (or (key-chord-modifiers event) (list ""))
-                 (key-chord-low-level-data event)
-                 (float (or (first (key-chord-position event)) -1.0))
-                 (float (or (second (key-chord-position event)) -1.0))))
+             (id window)
+             (key-chord-key-code event)
+             (or (key-chord-modifiers event) (list ""))
+             (key-chord-low-level-data event)
+             (float (or (first (key-chord-position event)) -1.0))
+             (float (or (second (key-chord-position event)) -1.0))))
 
 (defmethod rpc-set-proxy ((interface remote-interface) (buffer buffer)
                           &optional (proxy-uri "") (ignore-hosts (list nil)))
@@ -468,7 +473,7 @@ ADDRESS is in the form PROTOCOL://HOST:PORT."
   (%rpc-send interface "get_proxy" (id buffer)))
 
 (defmethod rpc-buffer-set ((interface remote-interface) (buffer buffer)
-                       (setting string) value)
+                           (setting string) value)
   "Set SETTING to VALUE for BUFFER.
 The valid SETTINGs are specified by the platform, e.g. for WebKitGTK it is
 https://webkitgtk.org/reference/webkit2gtk/stable/WebKitSettings.html.
@@ -595,7 +600,7 @@ Deal with URL with the following rules:
     ((not is-known-type)
      (log:info "Buffer ~a downloads ~a" buffer url)
      (download *interface* url :proxy-address (proxy-address buffer :downloads-only t)
-               :cookies cookies)
+                               :cookies cookies)
      (unless (find-buffer 'download-mode)
        (download-list (make-instance 'root-mode)))
      nil)
