@@ -134,13 +134,19 @@ This should not rely on the minibuffer's content.")
   ;; Warning: `hide' modifies the content of the minibuffer, the
   ;; callback-function and the cleanup-function cannot rely on the minibuffer
   ;; content safely.
+  ;; TODO: We should factor the shared code between `return-input',
+  ;; `return-immediate' and `cancel-input', e.g. `hide', the normalization of
+  ;; the input-buffer, etc.
   (setf (display-mode minibuffer) :nil)
   (hide *interface*)
   (with-slots (callback-function cleanup-function
                empty-complete-immediate completions completion-cursor)
       minibuffer
     (if completions
-        (let ((completion (nth completion-cursor completions)))
+        (let* ((completion (nth completion-cursor completions))
+               (completion (if (stringp completion)
+                               (cl-strings:replace-all completion " " " ")
+                               completion)))
           (if completion
               ;; if we're able to find a completion
               (funcall callback-function completion)
@@ -517,11 +523,11 @@ interpreted by `format'. "
   (insert (trivial-clipboard:text) minibuffer))
 
 (defmethod get-candidate ((minibuffer minibuffer))
-  "Return the current candidate in the minibuffer."
+  "Return the string for the current candidate in the minibuffer."
   (with-slots (completions completion-cursor)
       minibuffer
     (and completions
-         (format nil "~a" (nth completion-cursor completions)))))
+         (object-string (nth completion-cursor completions)))))
 
 (define-command copy-candidate (minibuffer-mode &optional (minibuffer (minibuffer *interface*)))
   "Paste clipboard text to input."
