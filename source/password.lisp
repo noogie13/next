@@ -53,35 +53,16 @@
                                                        (password-interface *interface*))))
       (clip-password (password-interface *interface*) password-name))))
 
-(defun generate-input-html-original (input-buffer cursor-index)
-  (cond ((equal "" input-buffer) (cl-markup:markup (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
-        ((eql cursor-index (length input-buffer)) (cl-markup:markup (:span input-buffer)
-                                                                    (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
-        (t (cl-markup:markup (:span (subseq input-buffer 0 cursor-index))
-                             (:span :id "cursor" (subseq input-buffer cursor-index (+ 1 cursor-index)))
-                             (:span (subseq input-buffer (+ 1  cursor-index)))))))
-
-(defun generate-input-html-new (input-buffer cursor-index)
-  (let ((input-buffer-password (make-string (length input-buffer) :initial-element #\*)))
-    (cond ((equal "" input-buffer-password) (cl-markup:markup (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
-          ((eql cursor-index (length input-buffer-password))
-           (cl-markup:markup (:span input-buffer-password)
-                             (:span :id "cursor" (cl-markup:raw "&nbsp;"))))
-          (t (cl-markup:markup (:span (subseq input-buffer-password 0 cursor-index))
-                               (:span :id "cursor" (subseq input-buffer-password cursor-index (+ 1 cursor-index)))
-                               (:span (subseq input-buffer-password (+ 1  cursor-index))))))))
-
 (define-command save-new-password ()
   "Save password to password interface."
-  (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
   (with-result* ((password-name (read-from-minibuffer
                                  (minibuffer *interface*)
                                  :input-prompt "Name for new password:"))
                  (master-password (read-from-minibuffer
                                    (minibuffer *interface*)
+                                   :invisible-input-p t
                                    :input-prompt "New password:")))
-    (save-password (password-interface *interface*) password-name master-password)
-    (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))))
+    (save-password (password-interface *interface*) password-name master-password)))
 
 (defun executable-find (command)
   "Search for COMMAND in the PATH and return the absolute file name.

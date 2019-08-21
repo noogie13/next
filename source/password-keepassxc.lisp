@@ -2,14 +2,13 @@
 
 (defmacro with-password (password-interface &body body)
   `(if (eq 'keepassxc-interface (type-of ,password-interface))
-       (if (null (password ,password-interface))
+       (if (null (master-password ,password-interface))
            (progn
-             (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-new))
              (with-result (password-set (read-from-minibuffer
                                          (minibuffer *interface*)
+                                         :invisible-input-p t
                                          :input-prompt "Password:"))
-               (setf (password ,password-interface) password-set)
-               (setf (symbol-function 'generate-input-html) (symbol-function 'generate-input-html-original))
+               (setf (master-password ,password-interface) password-set)
                ,@body))
            ,@body)
        ,@body))
