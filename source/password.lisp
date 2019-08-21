@@ -11,7 +11,7 @@
                                                          (uiop:getenv "HOME")))))))
 
 (defclass keepassxc-interface (password-interface)
-  ((password-file :reader password-file
+  ((password-file :accessor password-file
                   :initarg :file)
    (master-password :accessor master-password
                     :initarg :master-password
@@ -26,8 +26,11 @@
 (defgeneric save-password (password-interface password-name password)
   (:documentation "Save password to database."))
 
-;;; Prerequisite Functions
+(defgeneric with-password (password-interface &rest body)
+  (:documentation "If password slot is NIL, query for it.
+Otherwise run body."))
 
+;;; Prerequisite Functions
 (defun clip-password-string (pass)
   (let ((original-clipboard (trivial-clipboard:text)))
     (trivial-clipboard:text pass)
