@@ -183,18 +183,19 @@ registered into the mode class and all future mode instances will use the
 binding.
 If MODE and KEYMAP are nil, the binding is registered into root-mode.
 
-If SCHEME is unspecified, it defaults to :EMACS.  SCHEME is only useful together
-with MODE, it does not have any effect on KEYMAP.
+If SCHEME is unspecified, it defaults to :EMACS.  If SCHEME is unspecified, it
+defaults to :EMACS.  SCHEME is only useful together with MODE, it does not have
+any effect on KEYMAP.
 
 Examples:
 
   (define-key \"C-x C-c\" 'quit)
-  (define-key \"C-n\" 'scroll-down
+  (define-key \"C-n\" 'history-forwards
               :mode 'document-mode)
   ;; Only affect the first mode of the current buffer:
   (define-key \"C-c C-c\" 'reload
-              :keymap (keymap (mode (active-buffer *interface*))))"
-  (dolist (key (remove-if-not #'keywordp key-command-pairs))
+              :keymap (getf (keymap-schemes (first (modes (active-buffer *interface*)))) :emacs))"
+  (dolist (key (remove-if (complement #'keywordp) key-command-pairs))
     (remf key-command-pairs key))
   (when (and (null mode) (not (keymapp keymap)))
     (setf mode 'root-mode))
@@ -219,10 +220,7 @@ Examples:
                      (setf (getf map-scheme scheme) map)
                      map-scheme)))
            (when (keymapp keymap)
-             (set-key keymap key-sequence-string command)))
-  ;; Reset map so that bindings are properly updated when displayed in the
-  ;; minibuffer.
-  (clrhash %%command-key-bindings))
+             (set-key keymap key-sequence-string command))))
 
 (defun key (key-sequence-string)
   "Turn KEY-SEQUENCE-STRING into a sequence of serialized key-chords.
@@ -239,8 +237,8 @@ This can serve as the key in the keymap."
   (serialize-key-chord-stack
    (nreverse
     ;; Iterate through all key chords (space delimited)
-    (loop for key-chord-string in (cl-strings:split key-sequence-string " ")
-          for keys = (cl-strings:split key-chord-string "-")
+    (loop for key-chord-string in (str:split " " key-sequence-string)
+          for keys = (str:split "-" key-chord-string)
           collect (make-key-chord
                    :key-code nil
                    :key-string (first (last keys))

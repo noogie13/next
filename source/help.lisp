@@ -25,7 +25,7 @@
   (fuzzy-match input (package-variables)))
 
 (defun function-complete (input)
-  (fuzzy-match input (mapcar #'command-symbol (list-commands))))
+  (fuzzy-match input (mapcar #'sym (list-commands))))
 
 ;; TODO: This is barely useful as is since we don't have many globals.  We need to
 ;; augment the latter function so that we can inspect classes like remote-interface.
@@ -119,6 +119,20 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
                 (:a :href "https://github.com/atlas-engineer/next/issues"
                     "report")
                 " bugs, instabilities or feature wishes.")
+            (:p "You can help with Next development by supporting us in various ways:"
+                (:ul
+                 (:li "Become a backer of the "
+                      (:a :href "https://www.indiegogo.com/projects/next-browser-v1-4-0#/"
+                          "1.4.0 crowdfunding campaign")
+                      ".")
+                 (:li "Support continuous development on "
+                      (:a :href "https://www.patreon.com/next_browser"
+                          "Patreon")
+                      ".")
+                 (:li "Spread the word on social media and "
+                      (:a :href "https://github.com/atlas-engineer/next"
+                          "star the project on GitHub")
+                      ".")))
             (:h2 "Quickstart keys")
             (:ul
              (:li (:code "C-l") ": Load URL in tab")

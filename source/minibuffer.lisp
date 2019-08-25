@@ -43,8 +43,8 @@
           "C-p" #'select-previous
           "Down" #'select-next
           "Up" #'select-previous
-          "C-v" #'paste
-          "C-y" #'paste
+          "C-v" #'minibuffer-paste
+          "C-y" #'minibuffer-paste
           "C-w" #'copy-candidate
           "TAB" #'insert-candidate
           :keymap map)
@@ -104,6 +104,9 @@ This should not rely on the minibuffer's content.")
                                    :color "white")))
                      :documentation "The CSS applied to a minibuffer when it is set-up.")))
 
+(defmethod initialize-instance :after ((minibuffer minibuffer) &key)
+  (initialize-modes minibuffer))
+
 (defmethod read-from-minibuffer ((minibuffer minibuffer)
                                  &key callback input-prompt completion-function invisible-input-p setup-function
                                    cleanup-function empty-complete-immediate)
@@ -145,7 +148,7 @@ This should not rely on the minibuffer's content.")
     (if completions
         (let* ((completion (nth completion-cursor completions))
                (completion (if (stringp completion)
-                               (cl-strings:replace-all completion " " " ")
+                               (str:replace-all " " " " completion)
                                completion)))
           (if completion
               ;; if we're able to find a completion
@@ -164,8 +167,7 @@ This should not rely on the minibuffer's content.")
   (setf (display-mode minibuffer) :nil)
   (hide *interface*)
   (with-slots (callback-function cleanup-function) minibuffer
-    (let ((normalized-input (cl-strings:replace-all (input-buffer minibuffer)
-                                                    " " " ")))
+    (let ((normalized-input (str:replace-all " " " " (input-buffer minibuffer))))
       (funcall callback-function normalized-input))
     (when cleanup-function
       (funcall cleanup-function))))
@@ -222,9 +224,9 @@ This should not rely on the minibuffer's content.")
 
 (defun insert (characters &optional (minibuffer (minibuffer *interface*)))
   (setf (input-buffer minibuffer)
-        (cl-strings:insert characters
-                           (input-buffer minibuffer)
-                           :position (input-buffer-cursor minibuffer)))
+        (str:insert characters
+                    (input-buffer-cursor minibuffer)
+                    (input-buffer minibuffer)))
   (incf (input-buffer-cursor minibuffer) (length characters))
   (setf (completion-cursor minibuffer) 0)
   (update-display minibuffer))
@@ -515,9 +517,9 @@ interpreted by `format'. "
                    (title (buffer-get-title)))
       (echo "~a — ~a" url title))))
 
-(define-command paste (minibuffer-mode &optional (minibuffer (minibuffer *interface*)))
+(define-command minibuffer-paste (minibuffer-mode &optional (minibuffer (minibuffer *interface*)))
   "Paste clipboard text to input."
-  (insert (trivial-clipboard:text) minibuffer))
+  (insert (ring-clipboard (clipboard-ring *interface*)) minibuffer))
 
 (defmethod get-candidate ((minibuffer minibuffer))
   "Return the string for the current candidate in the minibuffer."
