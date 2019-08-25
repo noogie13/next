@@ -8,9 +8,7 @@
                        :initarg :directory
                        :initform (or (uiop:getenv "PASSWORD_STORE_DIR")
                                      (namestring (format nil "~a/.password-store"
-                                                         (uiop:getenv "HOME")))))
-   (master-password :accessor master-password
-                    :initform t)))
+                                                         (uiop:getenv "HOME")))))))
 
 (defclass keepassxc-interface (password-interface)
   ((password-file :accessor password-file
@@ -28,8 +26,9 @@
 (defgeneric save-password (password-interface password-name password)
   (:documentation "Save password to database."))
 
-(defgeneric password-correct-p (password-interface)
-  (:documentation "Make sure password is correct."))
+(defgeneric with-password (password-interface &rest body)
+  (:documentation "If password slot is NIL, query for it.
+Otherwise run body."))
 
 ;;; Prerequisite Functions
 (defun clip-password-string (pass)
@@ -40,6 +39,7 @@
        (sleep 5)
        (when (string= (trivial-clipboard:text) pass)
          (trivial-clipboard:text original-clipboard))))))
+
 
 ;;; Commands to wrap together.
 (defun copy-password-completion-fn (password-instance)
@@ -58,14 +58,14 @@
 
 (define-command save-new-password ()
   "Save password to password interface."
-  (with-result* ((new-password-name (read-from-minibuffer
+  (with-result* ((password-name (read-from-minibuffer
                                  (minibuffer *interface*)
                                  :input-prompt "Name for new password:"))
-                 (new-password (read-from-minibuffer
+                 (master-password (read-from-minibuffer
                                    (minibuffer *interface*)
                                    :invisible-input-p t
                                    :input-prompt "New password:")))
-    (save-password (password-interface *interface*) new-password-name new-password)))
+    (save-password (password-interface *interface*) password-name master-password)))
 
 (defun executable-find (command)
   "Search for COMMAND in the PATH and return the absolute file name.
@@ -76,12 +76,4 @@ Return nil if COMMAND is not found anywhere."
                          :output '(:string :stripped t)))
     path))
 
-(defmacro with-password (password-interface &body body)
-  `(if (null (master-password ,password-interface))
-       (with-result (password-entry (read-from-minibuffer
-                                     (minibuffer *interface*)
-                                     :invisible-input-p t
-                                     :input-prompt "Password:"))
-         (setf (master-password ,password-interface) password-entry)
-         ,@body)
-       ,@body))
+
