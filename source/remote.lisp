@@ -33,6 +33,7 @@ keyword is not recognized.")))
 (defclass buffer ()
   ((id :accessor id :initarg :id)
    (name :accessor name :initarg :name)
+   (title :accessor title :initarg :title)
    (modes :accessor modes :initarg :modes :initform '()
           :documentation "The list of mode instances.")
    (default-modes :accessor default-modes :initarg :default-modes
@@ -40,9 +41,10 @@ keyword is not recognized.")))
                   :documentation "The list of symbols of class to
 instantiate on buffer creation, unless specified.")
    (current-keymap-scheme ; TODO: Name keymap-scheme instead?
-    :initarg :current-keymap-scheme
-    :initform :emacs
-    :documentation "The keymap scheme that will be used
+                          :accessor current-keymap-scheme
+                          :initarg :current-keymap-scheme
+                          :initform :emacs
+                          :documentation "The keymap scheme that will be used
 for all modes in the current buffer.")
    (override-map :accessor override-map
                  :initarg :override-map
@@ -54,8 +56,8 @@ for all modes in the current buffer.")
 overrides all other bindings.  No libraries should ever touch the override-map,
 this is left for the user to customize to their needs.")
    (forward-input-events-p :accessor forward-input-events-p :initarg :forward-input-events-p
-                           :initform t
-                           :documentation "When non-nil, keyboard events are
+                         :initform t
+                         :documentation "When non-nil, keyboard events are
 forwarded to the platform port when no binding is found.  Pointer
 events (e.g. mouse events) are not affected by this, they are always
 forwarded when no binding is found.")
@@ -105,7 +107,10 @@ platform ports might support this.")
                            :border-radius "3px"))
               :documentation "The style of the boxes, e.g. link hints.")))
 
-(defmethod initialize-instance :after ((buffer buffer) &key)
+(defmethod initialize-modes ((buffer buffer))
+  "Initialize BUFFER modes.
+This must be called after BUFFER has been created on the platform port.
+See `rpc-buffer-make'."
   (let ((root-mode (make-instance 'root-mode :buffer buffer)))
     (dolist (mode-class (reverse (default-modes buffer)))
       ;; ":activate t" should not be necessary here since (modes buffer) should be
@@ -125,6 +130,8 @@ platform ports might support this.")
 
 (defmethod did-commit-navigation ((buffer buffer) url)
   (setf (name buffer) url)
+  (with-result (title (buffer-get-title))
+    (setf (title buffer) title))
   (dolist (mode (modes buffer))
     (did-commit-navigation mode url)))
 
@@ -149,8 +156,14 @@ commands.")
                                        ((executable-find "keepassxc-cli")
                                         (make-instance 'keepassxc-interface))
                                        (t nil)))
+   (dbus-pid :accessor dbus-pid :initform nil :type :number
+             :documentation "The process identifier of the dbus instance started
+by Next when the user session dbus instance is not available.")
    (minibuffer :accessor minibuffer :initform (make-instance 'minibuffer)
                :documentation "The minibuffer object.")
+   (clipboard-ring :accessor clipboard-ring :initform (make-instance
+                                                       'ring :items
+                                                       (make-array 1000 :initial-element nil)))
    (windows :accessor windows :initform (make-hash-table :test #'equal))
    (total-window-count :accessor total-window-count :initform 0)
    (last-active-window :accessor last-active-window :initform nil)
@@ -158,6 +171,10 @@ commands.")
    (total-buffer-count :accessor total-buffer-count :initform 0)
    (start-page-url :accessor start-page-url :initform "https://next.atlas.engineer/quickstart"
                    :documentation "The URL of the first buffer opened by Next when started.")
+   (open-external-link-in-new-window-p :accessor open-external-link-in-new-window-p :initform nil
+                                       :documentation "When open links from an external program, or
+when C-cliking on a URL, decide whether to open in a new
+window or not.")
    (key-chord-stack :accessor key-chord-stack :initform '()
                     :documentation "A stack that keeps track of the key chords a user has inputted.")
    (downloads :accessor downloads :initform '()
@@ -165,7 +182,7 @@ commands.")
    (download-watcher :accessor download-watcher :initform nil
                      :documentation "List of downloads.")
    (download-directory :accessor download-directory :initform nil
-                       :documentation "Path of directory where downloads will be
+                     :documentation "Path of directory where downloads will be
 stored.  Nil means use system default.")))
 
 (defun download-watch ()
@@ -219,9 +236,25 @@ current buffer."
         (echo "Download error: ~a" c)
         nil))))
 
+(defun ensure-dbus-session (interface)
+  (handler-case
+      (dbus:with-open-bus (bus (session-server-addresses))
+        ;; Dummy call to make sure dbus session is accessible.
+        (log:info "Bus connection name: ~A" (dbus:bus-name bus)))
+    (error ()
+      (match (mapcar (lambda (s) (str:split "=" s :limit 2))
+                     (str:split "
+"
+                                (uiop:run-program '("dbus-launch")
+                                                  :output '(:string :stripped t))))
+        ((list (list _ address) (list _ pid))
+         (setf (uiop:getenv "DBUS_SESSION_BUS_ADDRESS") address)
+         (setf (dbus-pid interface) (parse-integer pid)))))))
+
 (defmethod initialize-instance :after ((interface remote-interface)
                                        &key &allow-other-keys)
   "Start the RPC server."
+  (ensure-dbus-session interface)
   (let ((lock (bt:make-lock))
         (condition (bt:make-condition-variable)))
     (setf (active-connection interface)
@@ -262,7 +295,9 @@ Make sure to kill existing processes or if you were running Next from a REPL, ki
   (when (active-connection interface)
     (log:debug "Stopping server")
     ;; TODO: How do we close the connection properly?
-    (ignore-errors (bt:destroy-thread (active-connection interface)))))
+    (ignore-errors (bt:destroy-thread (active-connection interface)))
+    (when (dbus-pid interface)
+      (kill-program (dbus-pid interface)))))
 
 (defun %rpc-send-self (method-name signature &rest args)
   "Call METHOD over ARGS.
@@ -335,8 +370,8 @@ For an array of string, that would be \"as\"."
   (%rpc-send interface "window_exists" (id window)))
 
 (defmethod rpc-window-set-active-buffer ((interface remote-interface)
-                                         (window window)
-                                         (buffer buffer))
+                                      (window window)
+                                      (buffer buffer))
   (%rpc-send interface "window_set_active_buffer" (id window) (id buffer))
   (setf (active-buffer window) buffer))
 
@@ -378,7 +413,7 @@ For an array of string, that would be \"as\"."
   (%rpc-send interface "window_set_minibuffer_height" (id window) height))
 
 (defmethod rpc-buffer-make ((interface remote-interface)
-                            &key name default-modes)
+                          &key name default-modes)
   (let* ((buffer-id (get-unique-buffer-identifier interface))
          (buffer (apply #'make-instance 'buffer :id buffer-id
                         (append (when name `(:name ,name))
@@ -388,12 +423,15 @@ For an array of string, that would be \"as\"."
     (incf (total-buffer-count interface))
     (%rpc-send interface "buffer_make" buffer-id
                `(("cookies-path" ,(namestring (cookies-path buffer)))))
+    ;; Modes might require that buffer exists, so we need to initialize them
+    ;; after it has been created on the platform port.
+    (initialize-modes buffer)
     buffer))
 
 (defmethod %get-inactive-buffer ((interface remote-interface))
   (let ((active-buffers
           (mapcar #'active-buffer
-                  (alexandria:hash-table-values (windows *interface*))))
+                      (alexandria:hash-table-values (windows *interface*))))
         (buffers (alexandria:hash-table-values (buffers *interface*))))
     (alexandria:last-elt (set-difference buffers active-buffers))))
 
@@ -413,25 +451,25 @@ For an array of string, that would be \"as\"."
   (%rpc-send interface "buffer_load" (id buffer) uri))
 
 (defmethod rpc-buffer-evaluate-javascript ((interface remote-interface)
-                                           (buffer buffer) javascript
-                                           &optional (callback nil))
+                                         (buffer buffer) javascript
+                                         &optional (callback nil))
   (let ((callback-id
           (%rpc-send interface "buffer_evaluate_javascript" (id buffer) javascript)))
     (setf (gethash callback-id (callbacks buffer)) callback)
     callback-id))
 
 (defmethod rpc-minibuffer-evaluate-javascript ((interface remote-interface)
-                                               (window window) javascript
-                                               &optional callback)
+                                             (window window) javascript
+                                             &optional callback)
   ;; JS example: document.body.innerHTML = 'hello'
   (let ((callback-id
-          (%rpc-send interface "minibuffer_evaluate_javascript" (id window) javascript)))
+         (%rpc-send interface "minibuffer_evaluate_javascript" (id window) javascript)))
     (setf (gethash callback-id (minibuffer-callbacks window)) callback)
     callback-id))
 
 (defmethod rpc-generate-input-event ((interface remote-interface)
-                                     (window window)
-                                     (event key-chord))
+                                   (window window)
+                                   (event key-chord))
   "For now, we only generate keyboard events.
 In the future, we could also support other input device events such as mouse
 events."
@@ -443,12 +481,12 @@ events."
               (key-chord-position event))
              (id window))
   (%rpc-send interface "generate_input_event"
-             (id window)
-             (key-chord-key-code event)
-             (or (key-chord-modifiers event) (list ""))
-             (key-chord-low-level-data event)
-             (float (or (first (key-chord-position event)) -1.0))
-             (float (or (second (key-chord-position event)) -1.0))))
+                 (id window)
+                 (key-chord-key-code event)
+                 (or (key-chord-modifiers event) (list ""))
+                 (key-chord-low-level-data event)
+                 (float (or (first (key-chord-position event)) -1.0))
+                 (float (or (second (key-chord-position event)) -1.0))))
 
 (defmethod rpc-set-proxy ((interface remote-interface) (buffer buffer)
                           &optional (proxy-uri "") (ignore-hosts (list nil)))
@@ -473,7 +511,7 @@ ADDRESS is in the form PROTOCOL://HOST:PORT."
   (%rpc-send interface "get_proxy" (id buffer)))
 
 (defmethod rpc-buffer-set ((interface remote-interface) (buffer buffer)
-                           (setting string) value)
+                       (setting string) value)
   "Set SETTING to VALUE for BUFFER.
 The valid SETTINGs are specified by the platform, e.g. for WebKitGTK it is
 https://webkitgtk.org/reference/webkit2gtk/stable/WebKitSettings.html.
@@ -564,13 +602,14 @@ TODO: Only booleans are supported for now."
   "Create new buffers from URLs."
   ;; The new active buffer should be the first created buffer.
   (when urls
-    (let ((buffer (make-buffer))
-          (window (rpc-window-make *interface*)))
-      (set-url-buffer (first urls) buffer)
-      (window-set-active-buffer *interface* window buffer))
+    (let ((buffer (make-buffer)))
+      (set-url (first urls) :buffer buffer)
+      (if (open-external-link-in-new-window-p *interface*)
+          (window-set-active-buffer *interface* (rpc-window-make *interface*) buffer)
+          (set-active-buffer *interface* buffer)))
     (loop for url in (rest urls) do
       (let ((buffer (make-buffer)))
-        (set-url-buffer url buffer)))))
+        (set-url url :buffer buffer)))))
 
 (defmethod resource-query-default ((buffer buffer)
                                    &key url
@@ -593,14 +632,15 @@ Deal with URL with the following rules:
     ((or is-new-window
          ;; TODO: Streamline the customization of this binding.
          (and (equal modifiers '("C"))
-              (string= mouse-button "button1")))
+              (string= mouse-button "button1"))
+         (string= mouse-button "button2"))
      (log:info "Load ~a in new buffer" url)
      (make-buffers (list url))
      nil)
     ((not is-known-type)
      (log:info "Buffer ~a downloads ~a" buffer url)
      (download *interface* url :proxy-address (proxy-address buffer :downloads-only t)
-                               :cookies cookies)
+               :cookies cookies)
      (unless (find-buffer 'download-mode)
        (download-list (make-instance 'root-mode)))
      nil)

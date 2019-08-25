@@ -10,6 +10,7 @@
   - [[#run-from-source][Run from Source]]
   - [[#update-local-lisp-libraries][Update local Lisp libraries]]
 - [[#help--community][Help & Community]]
+  - [[#learning-common-lisp][Learning Common Lisp]]
   - [[#contribution][Contribution]]
   - [[#irc-channel][IRC Channel]]
 
@@ -43,7 +44,8 @@ instructions: https://www.quicklisp.org
 
 To install Quicklisp:
 - Download https://beta.quicklisp.org/quicklisp.lisp.
-- Execute ~lisp --load quicklisp.lisp~ to load Quicklisp.
+- Execute ~$LISP --load quicklisp.lisp~ to load Quicklisp. (Replace =$LISP= with
+  =sbcl= or any supported Lisp compiler.)
 - Evaluate in the REPL ~(quicklisp-quickstart:install)~ to install.
 - Evaluate in the REPL ~(ql:add-to-init-file)~ to add Quicklisp to your Lisp init file.
 
@@ -210,22 +212,51 @@ Then in a shell execute the following:
    system definition (you can not use relative pathnames).
 5. Execute ~(ql:quickload :next)~ to load the Next system into your
    Lisp image.
-6. Make sure the platform port can be bound by Next, as described
+6. Make sure the platform port can be found by Next, as described
    in the previous section.
 7. Execute ~(next:start)~ to open your first Next window.
 
 ** Update local Lisp libraries
 
-When you need to update the  local quicklisp libraries, located in the
-~quicklisp/~  directory  of  the  ~next~ project,  run  the  following:
+If you use Quicklisp for Common Lisp library management outside the context of
+Next, you may want to reuse your local distribution to build Next.
 
-: make quicklisp-update
+To do so, invoke =make= with the following option:
+
+#+begin_src sh
+make NEXT_INTERNAL_QUICKLISP=false ...
+#+end_src
+
+In this case, you'll have to make sure the Quicklisp distribution is up-to-date
+or else future versions of Next might fail to build.  In a REPL:
+
+#+begin_src lisp
+(ql:update-dist "quicklisp")
+#+end_src
+
+If you use the internal Quicklisp distribution (i.e. with the default
+=NEXT_INTERNAL_QUICKLISP=true=), the distribution is updated automatically for
+you.
 
 * Help & Community
 There are several ways to ask for help from the community. The first
 and easiest one is to simply open up an issue with whatever problem
 you have. Feel free to open issues for any task, suggestion or
 conversation you wish to have.
+
+** Learning Common Lisp
+
+There are a couple of resources out there to learn Common Lisp.
+
+- The [[https://lispcookbook.github.io/cl-cookbook/][Common Lisp Cookbook]] is a modern, community maintained resource covering
+  many aspects of Common Lisp programming and beyond, from editor setup to
+  style.  The front page lists many other resources for learning, such as books
+  (some available for free) and other web sites.  If you already know another
+  Lisp/Scheme, the cookbook can serve as a good crash course.
+
+- [[http://www.gigamonkeys.com/book/][Practical Common Lisp]] is a popular book available for free.  It assumes you
+  already know programming.  It gives a good coverage of the "core" of the
+  language and goes to the point.
 
 ** Contribution
 To contribute, please find a task within [[file:CHANGELOG.org][CHANGELOG.org]] document that has a TASK

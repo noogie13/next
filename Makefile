@@ -20,7 +20,7 @@ help:
 
 lisp_files := next.asd source/*.lisp source/ports/*.lisp
 
-next: $(lisp_files)
+next: $(lisp_files) quicklisp-update
 	$(NEXT_INTERNAL_QUICKLISP) && $(MAKE) deps || true
 	env NEXT_INTERNAL_QUICKLISP=$(NEXT_INTERNAL_QUICKLISP) $(LISP) $(LISP_FLAGS) \
 		--eval '(require "asdf")' \
@@ -29,14 +29,14 @@ next: $(lisp_files)
 		--eval '(ql:quickload :prove-asdf)' \
 		--load next.asd \
 		--eval '(asdf:make :next)' \
-		--eval '(uiop:quit)'
+		--eval '(uiop:quit)' || printf "\n%s\n%s\n" "Compilation failed." "Make sure the 'xclip' binary and the 'sqlite' and 'libfixposix' development files are available on your system."
 
 .PHONY: app-bundle
 app-bundle: next
 	mkdir -p ./Next.app/Contents/MacOS
 	mkdir -p ./Next.app/Resources
 	mv ./next ./Next.app/Contents/MacOS
-	cp -r ./ports/pyqt-webengine/ ./Next.app/Contents/MacOS
+	cp -r ./ports/pyqt-webengine/* ./Next.app/Contents/MacOS
 	mv ./Next.app/Contents/MacOS/next-pyqt-webengine.py ./Next.app/Contents/MacOS/next-pyqt-webengine
 	chmod +x ./Next.app/Contents/MacOS/next-pyqt-webengine
 	cp ./assets/Info.plist ./Next.app/Contents
@@ -48,7 +48,7 @@ install-app-bundle:
 
 .PHONY: gtk-webkit
 gtk-webkit:
-	$(MAKE) -C ports/gtk-webkit
+	$(MAKE) -C ports/gtk-webkit || printf "\n%s\n%s\n" "Compilation failed." "Make sure 'webkitgtk >=2.22' development files are available on your system."
 
 .PHONY: all
 all:
@@ -137,14 +137,14 @@ deps: $(QUICKLISP_DIR)/setup.lisp
 		--eval '(ql:quickload :next)' \
 		--eval '(uiop:quit)'
 
-## TODO: Always call quicklisp-update?  Then update documentation accordingly.
+## This rule only update the internal distribution.
 .PHONY: quicklisp-update
 quicklisp-update: $(QUICKLISP_DIR)/setup.lisp
-	$(LISP) $(LISP_FLAGS) \
+	$(NEXT_INTERNAL_QUICKLISP) && $(LISP) $(LISP_FLAGS) \
 		--load $(QUICKLISP_DIR)/setup.lisp \
 		--eval '(require "asdf")' \
 		--eval '(ql:update-dist "quicklisp" :prompt nil)' \
-		--eval '(uiop:quit)'
+		--eval '(uiop:quit)' || true
 
 # Testing that next loads is a first test.
 test: $(lisp_files)

@@ -20,11 +20,13 @@
           "C-x C-w" 'copy-hint-url
           "C-f" 'history-forwards
           "C-b" 'history-backwards
+          "C-v" 'paste
+          "C-c" 'copy
           "button9" 'history-forwards
           "button8" 'history-backwards
           "C-p" 'scroll-up
           "C-n" 'scroll-down
-          "C-x C-=" 'zoom-in-page ;
+          "C-x C-=" 'zoom-in-page
           "C-x C-+" 'zoom-in-page
           "C-x +" 'zoom-in-page
           "C-x C-HYPHEN" 'zoom-out-page
@@ -44,15 +46,30 @@
           "M-s-<" 'scroll-to-top
           "M->" 'scroll-to-bottom
           "M-<" 'scroll-to-top
-          "C-v" 'scroll-page-down
+          ;; "C-v" 'scroll-page-down
           "M-v" 'scroll-page-up
           "C-w" 'copy-url
           "M-w" 'copy-title
           ;; Leave SPACE unbound so that the paltform port decides wether to
           ;; insert of scroll.
           "s-SPACE" 'scroll-page-up
+
+          ;; keypad:
           "Page_Up" 'scroll-page-up
-          "Page_Down" 'scroll-page-down)
+          "Page_Down" 'scroll-page-down
+          "Page_End" 'scroll-to-bottom
+          "Page_Home" 'scroll-to-top
+          ;; keypad, gtk:
+          "KP_Left" 'scroll-left
+          "KP_Down" 'scroll-down
+          "KP_Up" 'scroll-up
+          "KP_Right" 'scroll-right
+          "KP_End" 'scroll-to-bottom
+          "KP_Home" 'scroll-to-top
+          "KP_Next" 'scroll-page-down
+          "KP_Page_Up" 'scroll-page-up
+          "KP_Prior" 'scroll-page-up)
+
         (define-key :keymap vi-map
           "H" 'history-backwards
           "L" 'history-forwards
@@ -61,6 +78,7 @@
           "; f" 'follow-hint-new-buffer
           "button9" 'history-forwards
           "button8" 'history-backwards
+
           "h" 'scroll-left
           "j" 'scroll-down
           "k" 'scroll-up
@@ -69,6 +87,20 @@
           "Down" 'scroll-down
           "Up" 'scroll-up
           "Right" 'scroll-right
+          ;; keypad:
+          "Page_End" 'scroll-to-bottom
+          "Page_Home" 'scroll-to-top
+          ;; keypad, gtk:
+          "KP_Left" 'scroll-left
+          "KP_Down" 'scroll-down
+          "KP_Up" 'scroll-up
+          "KP_Right" 'scroll-right
+          "KP_End" 'scroll-to-bottom
+          "KP_Home" 'scroll-to-top
+          "KP_Next" 'scroll-page-down
+          "KP_Page_Up" 'scroll-page-up
+          "KP_Prior" 'scroll-page-up
+
           "z i" 'zoom-in-page
           "z o" 'zoom-out-page
           "z z" 'unzoom-page
@@ -95,7 +127,7 @@
               :vi-normal vi-map))))
   ;; Init.
   ;; TODO: Do we need to set the default URL?  Maybe not.
-  ;; (set-url-buffer (default-new-buffer-url (buffer %mode))
+  ;; (set-url (default-new-buffer-url (buffer %mode))
   ;;                 (buffer %mode))
   )
 
@@ -106,7 +138,7 @@
                               ;; (mode (active-buffer *interface*))
                                                   ))))
     (when parent
-      (set-url (node-data parent) t))))
+      (set-url (node-data parent) :disable-history t))))
 
 (define-command history-forwards (document-mode)
   "Move forwards in history selecting the first child."
@@ -115,7 +147,7 @@
                                   ;; (mode (active-buffer *interface*))
                                   ))))
     (unless (null children)
-      (set-url (node-data (nth 0 children)) t))))
+      (set-url (node-data (nth 0 children)) :disable-history t))))
 
 (defun history-forwards-completion-fn (&optional (mode (find-mode
                                                         (active-buffer *interface*)
@@ -156,7 +188,7 @@
         (return-from add-or-traverse-history t)))
     ;; if we made it this far, we must create a new node
     (when url
-      (history-add url)) ; add to history database
+      (history-typed-add url)) ; add to history database
     (let ((new-node (make-instance 'node
                                    :parent active-node
                                    :data url)))
@@ -187,3 +219,26 @@
   (echo "Finished loading: ~a." url)
   ;; TODO: Wait some time before dismissing the minibuffer.
   (echo-dismiss (minibuffer *interface*)))
+
+(define-parenscript %paste ((input-text (ring-clipboard (clipboard-ring *interface*))))
+  (let* ((active-element (ps:chain document active-element))
+         (start-position (ps:chain active-element selection-start))
+         (end-position (ps:chain active-element selection-end)))
+    (setf (ps:chain active-element value)
+          (+ (ps:chain active-element value (substring 0 start-position))
+             (ps:lisp input-text)
+             (ps:chain active-element value
+                       (substring end-position
+                                  (ps:chain active-element value length)))))))
+
+(define-command paste ()
+  "Paste text."
+  (%paste))
+
+(define-parenscript %copy ()
+  (ps:chain window (get-selection) (to-string)))
+
+(define-command copy ()
+  "Copy text."
+  (with-result (input (%copy))
+    (ring-insert (clipboard-ring *interface*) (trivial-clipboard:text input))))
